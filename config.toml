@@ -1,0 +1,19 @@
+[theme]
+# Tema ini dibaca Streamlit buat semua widget bawaan (st.button, dll),
+# DAN dibaca otomatis oleh custom component seperti streamlit-mic-recorder
+# buat nyamain warna tombol mic-nya sama tema app. Ini satu-satunya cara
+# resmi buat "ngatur CSS" tombol mic — komponennya render di iframe
+# tersandbox yang gak bisa disentuh CSS halaman biasa (lihat ui.py).
+
+primaryColor = "#6366f1"       # indigo-500 — warna aksen tombol (termasuk tombol mic)
+backgroundColor = "#ffffff"    # bg area chat utama
+secondaryBackgroundColor = "#f1f5f9"
+textColor = "#1e293b"
+font = "sans serif"
+
+[theme.sidebar]
+# Sidebar dark/modern terpisah dari tema utama — cocok sama palet di ui.py
+primaryColor = "#818cf8"
+backgroundColor = "#1e1b3a"
+secondaryBackgroundColor = "#2a2657"
+textColor = "#e2e8f0"

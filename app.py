@@ -33,7 +33,15 @@ from ui import (
     render_chat_bubble,
     render_guardrail_status,
     format_session_time,
+    BOT_AVATAR,
+    USER_AVATAR,
 )
+
+try:
+    from streamlit_mic_recorder import speech_to_text
+    MIC_AVAILABLE = True
+except ImportError:
+    MIC_AVAILABLE = False
 
 # -----------------------------------------------------------------------------
 # 1. Konfigurasi Halaman & Styling UI
@@ -255,7 +263,8 @@ SYSTEM_INSTRUCTION = harden_system_instruction(BASE_SYSTEM_INSTRUCTION)
 st.markdown(render_hero(jenjang), unsafe_allow_html=True)
 
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
+    avatar = BOT_AVATAR if message["role"] == "assistant" else USER_AVATAR
+    with st.chat_message(message["role"], avatar=avatar):
         st.markdown(render_chat_bubble(message["role"], message["content"]), unsafe_allow_html=True)
         if message["role"] == "assistant" and message.get("model"):
             st.caption(f"🤖 {message['model']}")
@@ -337,7 +346,7 @@ if btn_quiz:
         st.session_state.messages.append({"role": "user", "content": quiz_user_msg})
         save_message(supabase, st.session_state.session_id, jenjang, "user", quiz_user_msg)
 
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar=BOT_AVATAR):
             quiz_instruction = SYSTEM_INSTRUCTION + """
             TUGAS KHUSUS UJI PEMAHAMAN:
             1. Analisis seluruh riwayat percakapan sebelumnya.
@@ -360,29 +369,50 @@ if btn_quiz:
                 st.rerun()
 
 # -----------------------------------------------------------------------------
-# 7. Input Chat Utama (dengan Guardrail)
+# 7. Input Chat Utama (Teks + Suara, dengan Guardrail)
 # -----------------------------------------------------------------------------
-if prompt := st.chat_input("Tanyakan materi atau konsep pelajaran di sini..."):
+voice_text = None
+if MIC_AVAILABLE:
+    mic_col, hint_col = st.columns([1, 8])
+    with mic_col:
+        st.markdown('<div class="tp-mic-wrap">', unsafe_allow_html=True)
+        voice_text = speech_to_text(
+            language="id",
+            start_prompt="🎙️",
+            stop_prompt="⏹️",
+            just_once=True,
+            use_container_width=True,
+            key="stt_widget",
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
+    with hint_col:
+        st.caption("Tekan 🎙️ buat ngomong, atau ketik di bawah.")
+
+prompt = st.chat_input("Tanyakan materi atau konsep pelajaran di sini...")
+if not prompt and voice_text:
+    prompt = voice_text
+
+if prompt:
 
     # --- Guardrail: filter input sebelum diproses ---
     matched_pattern = detect_jailbreak_attempt(prompt)
 
     st.session_state.messages.append({"role": "user", "content": prompt})
     save_message(supabase, st.session_state.session_id, jenjang, "user", prompt)
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar=USER_AVATAR):
         st.markdown(render_chat_bubble("user", prompt), unsafe_allow_html=True)
 
     if matched_pattern:
         st.session_state.blocked_count += 1
         log_attempt(st.session_state.session_id, prompt, matched_pattern)
         bot_reply = guardrail_refusal_message(jenjang)
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar=BOT_AVATAR):
             st.markdown(render_chat_bubble("assistant", bot_reply), unsafe_allow_html=True)
         st.session_state.messages.append({"role": "assistant", "content": bot_reply})
         save_message(supabase, st.session_state.session_id, jenjang, "assistant", bot_reply)
         st.rerun()
     else:
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar=BOT_AVATAR):
             bot_reply, model_label = handle_model_call(
                 SYSTEM_INSTRUCTION, 0.6,
                 f"Tutor sedang menyiapkan petunjuk untuk tingkat {jenjang.split()[0]}..."
