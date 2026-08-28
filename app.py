@@ -72,6 +72,10 @@ if uploaded_pdf:
     except Exception as e:
         st.sidebar.error(f"Gagal membaca PDF: {e}")
 
+st.sidebar.markdown("---")
+st.sidebar.subheader("🎯 Evaluasi Belajar")
+btn_quiz = st.sidebar.button("📝 Uji Pemahamanku")
+
 # -----------------------------------------------------------------------------
 # 3. Dynamic System Instruction Sesuai Jenjang
 # -----------------------------------------------------------------------------
@@ -147,6 +151,56 @@ for message in st.session_state.messages:
 # -----------------------------------------------------------------------------
 # 5. Input & Respon Agen
 # -----------------------------------------------------------------------------
+if btn_quiz:
+    if not st.session_state.messages:
+        st.sidebar.warning("⚠️ Belum ada riwayat percakapan. Mulai obrolan terlebih dahulu!")
+    else:
+        quiz_user_msg = "📝 Tolong buatkan 2 soal latihan adaptif berdasarkan materi yang telah kita bahas untuk menguji pemahamanku."
+        st.session_state.messages.append({"role": "user", "content": quiz_user_msg})
+        
+        contents = []
+        if pdf_context:
+            contents.append(types.Part.from_text(text=f"[DOKUMEN ACUAN/BUKU]:\n{pdf_context[:4000]}"))
+
+        for msg in st.session_state.messages:
+            role = "user" if msg["role"] == "user" else "model"
+            contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
+
+        if uploaded_image:
+            img = Image.open(uploaded_image)
+            contents.append(img)
+
+        with st.chat_message("assistant"):
+            with st.spinner(f"Menyiapkan 2 soal latihan adaptif untuk tingkat {jenjang.split()[0]}..."):
+                try:
+                    quiz_instruction = SYSTEM_INSTRUCTION + """
+                    TUGAS KHUSUS UJI PEMAHAMAN:
+                    1. Analisis seluruh riwayat percakapan sebelumnya.
+                    2. Buatkan tepat 2 soal latihan adaptif yang relevan dengan topik yang dipelajari dan tingkat pendidikan pengguna.
+                    3. DILARANG KERAS memberikan kunci jawaban, pembahasannya, atau solusinya terlebih dahulu.
+                    4. Berikan dorongan agar pengguna mencoba menjawabnya sendiri.
+                    """
+                    response = client.models.generate_content(
+                        model="gemini-3.6-flash",
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            system_instruction=quiz_instruction,
+                            temperature=0.7,
+                        )
+                    )
+                    
+                    bot_reply = response.text
+                    st.markdown(bot_reply)
+                    
+                    if enable_tts:
+                        speak_text(bot_reply)
+
+                    st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+                    st.rerun()
+                
+                except Exception as e:
+                    st.error(f"Terjadi kesalahan teknis: {str(e)}")
+
 if prompt := st.chat_input("Tanyakan materi atau konsep pelajaran di sini..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
