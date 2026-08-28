@@ -1,29 +1,128 @@
 # 🎓 Tutor Pintar AI
 
-Asisten Belajar Interaktif untuk siswa SMP/SMA menggunakan **Google Gemini 2.5 Flash**, **Streamlit**, dan **Metode Socratic**.
+Aplikasi bimbingan belajar interaktif berbasis **Streamlit** dan **AI** yang menerapkan metode pembelajaran **Socratic** (membimbing siswa menemukan jawaban sendiri melalui pertanyaan pemantik) serta dilengkapi dengan fitur **Kuis Adaptif**, **Riwayat Chat Tersimpan**, **Ekspor Catatan Belajar**, dan **Guardrail Anti-Jailbreak**.
 
-## 🚀 Cara Menjalankan Proyek
+---
 
-1. **Clone/Buka Folder Proyek** di VS Code.
-2. **Buat Virtual Environment (opsional tapi disarankan):**
-   ```bash
-   python -m venv venv
-   # Aktifkan di Windows:
-   venv\Scripts\activate
-   # Atau di Mac/Linux:
-   source venv/bin/activate
+## 🚀 Fitur Utama
+
+- 💡 **Metode Pembelajaran Socratic**: AI bertindak sebagai tutor bijak yang membimbing siswa memahami konsep dasar, bukan sekadar memberikan jawaban langsung.
+- 📝 **Kuis Adaptif & Evaluasi Pemahaman**: Generasi soal kuis otomatis di akhir sesi belajar berdasarkan riwayat percakapan.
+- 💾 **Riwayat Chat Tersimpan (Supabase)**: Setiap pesan otomatis tersimpan ke database. Siswa bisa lanjut belajar kapan saja pakai kode sesi.
+- 📄 **Ekspor Catatan Belajar (PDF)**: Unduh seluruh riwayat percakapan jadi PDF rapi, siap dicetak atau dibaca ulang.
+- 🛡️ **Guardrail & Anti-Jailbreak**: Filter input mendeteksi percobaan manipulasi prompt (jailbreak), system instruction dikunci lapis tambahan, dan status keamanan tampil real-time di sidebar.
+- 🎨 **UI/UX Modern**: Styling ala Tailwind CSS (custom, karena Streamlit tidak mendukung Tailwind compiler native) + ikon Lucide, bubble chat kustom, sidebar terstruktur per section.
+- ⚡ **Integrasi AI Responsif**: Pemrosesan bahasa alami cepat via Google Gemini.
+
+---
+
+## 🛠️ Teknologi yang Digunakan
+
+- **Bahasa Pemrograman**: Python 3.10+
+- **Framework UI**: [Streamlit](https://streamlit.io/) + custom CSS (Tailwind-style) + [Lucide Icons](https://lucide.dev/)
+- **Model AI**: Google Gemini AI Engine
+- **Database**: [Supabase](https://supabase.com/) (PostgreSQL)
+- **Ekspor PDF**: fpdf2
+- **Versi Kontrol**: Git & GitHub
+
+---
+
+## 📂 Struktur Proyek
+
+```text
+tutor-pintar-ai/
+├── app.py              # Logika utama aplikasi Streamlit & alur chat
+├── db.py                # Layer koneksi & query Supabase (riwayat chat)
+├── export.py             # Generator PDF catatan belajar
+├── guardrail.py           # Filter jailbreak & hardening system prompt
+├── ui.py                  # Styling Tailwind-style + helper Lucide icon
+├── requirements.txt      # Daftar dependensi & modul Python
+└── README.md              # Dokumentasi resmi proyek
+```
+
+---
+
+## ⚙️ Cara Menjalankan Proyek di Lokal
+
+### 1. Prasyarat
+Pastikan kamu sudah menginstal **Python 3.10** atau versi yang lebih baru di komputermu.
+
+### 2. Clone Repositori
+```bash
+git clone https://github.com/vaddys11/tutor-pintar-ai.git
+cd tutor-pintar-ai
+```
+
+### 3. Buat & Aktifkan Virtual Environment
+- **Windows (PowerShell)**:
+  ```powershell
+  python -m venv venv
+  .\venv\Scripts\Activate
+  ```
+- **Linux / macOS**:
+  ```bash
+  python3 -m venv venv
+  source venv/bin/activate
+  ```
+
+### 4. Instal Dependensi
+```bash
+pip install -r requirements.txt
+```
+
+### 5. Setup Database Supabase
+1. Buat project baru di [supabase.com](https://supabase.com/).
+2. Buka **SQL Editor**, jalankan query berikut untuk buat tabel riwayat chat:
+   ```sql
+   create table chat_history (
+       id uuid primary key default gen_random_uuid(),
+       session_id text not null,
+       jenjang text not null,
+       role text not null,
+       content text not null,
+       created_at timestamptz default now()
+   );
+
+   create index idx_session on chat_history(session_id);
    ```
-3. **Install Dependensi:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. **Konfigurasi API Key:**
-   - Salin file `.env.example` menjadi `.env`:
-     ```bash
-     cp .env.example .env
-     ```
-   - Masukkan `GEMINI_API_KEY` kamu di dalam file `.env`. (Atau bisa dimasukkan langsung via sidebar UI Streamlit nanti).
-5. **Jalankan Aplikasi:**
-   ```bash
-   streamlit run app.py
-   ```
+3. Ambil `Project URL` dan `anon public key` dari **Project Settings > API**.
+
+> Kalau Supabase tidak dikonfigurasi, aplikasi tetap bisa dijalankan — hanya fitur simpan/lanjut riwayat chat yang nonaktif.
+
+### 6. Konfigurasi API Key
+Buat file `.env` di root folder proyek (atau set via Streamlit secrets):
+```env
+GEMINI_API_KEY=API_KEY_GEMINI_KAMU_DI_SINI
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_KEY=SUPABASE_ANON_KEY_KAMU_DI_SINI
+```
+
+### 7. Jalankan Aplikasi Streamlit
+```bash
+streamlit run app.py
+```
+Aplikasi akan otomatis terbuka di browser kamu pada alamat `http://localhost:8501`.
+
+---
+
+## 🛡️ Catatan Guardrail
+
+Sistem anti-jailbreak bekerja di tiga lapis:
+1. **Filter input** — mencocokkan pesan pengguna dengan pola percobaan manipulasi yang dikenal (contoh: perintah "abaikan instruksi sebelumnya", "aktifkan mode tanpa batasan", dsb).
+2. **System instruction hardening** — instruksi inti dibungkus aturan non-negotiable yang melarang override peran atau kebocoran system prompt.
+3. **Pengecekan output ringan** — mendeteksi kalau respons AI terlanjur memberi jawaban instan, lalu menambahkan pengingat.
+
+Percobaan yang terdeteksi dicatat ke `guardrail.log` (lokal) dan ditampilkan sebagai penghitung di sidebar. Sistem ini adalah lapis pertahanan standar — bukan jaminan 100%, tetap disarankan pengawasan pengajar untuk penggunaan di lingkungan sekolah.
+
+---
+
+## 📝 Catatan Pengembangan & Keamanan
+
+- **File `.env` & Konfigurasi Lokal**: Jangan pernah men-commit API Key atau kunci autentikasi ke repositori publik. Pastikan folder `.continue/` dan file `.env` sudah terdaftar di `.gitignore`.
+- **Supabase Key**: Gunakan `anon public key` untuk aplikasi client-side seperti ini, bukan `service_role key`.
+
+---
+
+## 📄 Lisensi
+
+Proyek ini dikembangkan untuk tujuan edukasi dan pembelajaran terbuka.
