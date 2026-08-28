@@ -12,7 +12,7 @@ Aplikasi bimbingan belajar interaktif berbasis **Streamlit** dan **AI** yang men
 - 📄 **Ekspor Catatan Belajar (PDF)**: Unduh seluruh riwayat percakapan jadi PDF rapi, siap dicetak atau dibaca ulang.
 - 🛡️ **Guardrail & Anti-Jailbreak**: Filter input mendeteksi percobaan manipulasi prompt (jailbreak), system instruction dikunci lapis tambahan, dan status keamanan tampil real-time di sidebar.
 - 🎨 **UI/UX Modern**: Styling ala Tailwind CSS (custom, karena Streamlit tidak mendukung Tailwind compiler native) + ikon Lucide, bubble chat kustom, sidebar terstruktur per section.
-- ⚡ **Integrasi AI Responsif**: Pemrosesan bahasa alami cepat via Google Gemini.
+- ⚡ **Multi-Model AI Fallback (Gratis)**: Terhubung lewat OpenRouter — kalau satu model gratis kena limit, otomatis pindah ke model gratis berikutnya tanpa gangguan.
 
 ---
 
@@ -20,7 +20,7 @@ Aplikasi bimbingan belajar interaktif berbasis **Streamlit** dan **AI** yang men
 
 - **Bahasa Pemrograman**: Python 3.10+
 - **Framework UI**: [Streamlit](https://streamlit.io/) + custom CSS (Tailwind-style) + [Lucide Icons](https://lucide.dev/)
-- **Model AI**: Google Gemini AI Engine
+- **Model AI**: OpenRouter (OpenAI-compatible) — multi-model gratis dengan fallback otomatis (Gemini 2.0 Flash Lite, DeepSeek R1, Llama 3.3 70B, Qwen 2.5 72B)
 - **Database**: [Supabase](https://supabase.com/) (PostgreSQL)
 - **Ekspor PDF**: fpdf2
 - **Versi Kontrol**: Git & GitHub
@@ -72,7 +72,7 @@ pip install -r requirements.txt
 
 ### 5. Setup Database Supabase
 1. Buat project baru di [supabase.com](https://supabase.com/).
-2. Buka **SQL Editor**, jalankan query berikut untuk buat tabel riwayat chat:
+2. Buka **SQL Editor**, jalankan query berikut untuk buat tabel riwayat chat & daftar sesi:
    ```sql
    create table chat_history (
        id uuid primary key default gen_random_uuid(),
@@ -84,7 +84,18 @@ pip install -r requirements.txt
    );
 
    create index idx_session on chat_history(session_id);
+
+   create table sessions (
+       session_id text primary key,
+       jenjang text not null,
+       title text not null default 'Percakapan Baru',
+       created_at timestamptz default now(),
+       updated_at timestamptz default now()
+   );
+
+   create index idx_sessions_updated on sessions(updated_at desc);
    ```
+   > Tabel `sessions` dipakai buat daftar sesi di sidebar (judul otomatis + rename). Judul dibuat otomatis dari pesan pertama tiap sesi, dan bisa diganti manual lewat ikon ✏️.
 3. Ambil `Project URL` dan `anon public key` dari **Project Settings > API**.
 
 > Kalau Supabase tidak dikonfigurasi, aplikasi tetap bisa dijalankan — hanya fitur simpan/lanjut riwayat chat yang nonaktif.
@@ -92,7 +103,7 @@ pip install -r requirements.txt
 ### 6. Konfigurasi API Key
 Buat file `.env` di root folder proyek (atau set via Streamlit secrets):
 ```env
-GEMINI_API_KEY=API_KEY_GEMINI_KAMU_DI_SINI
+OPENROUTER_API_KEY=sk-or-v1-API_KEY_OPENROUTER_KAMU_DI_SINI
 SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_KEY=SUPABASE_ANON_KEY_KAMU_DI_SINI
 ```

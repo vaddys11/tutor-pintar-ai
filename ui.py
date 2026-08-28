@@ -170,6 +170,36 @@ CUSTOM_CSS = """
 [data-testid="stFileUploader"], .stTextInput>div>div>input, .stSelectbox>div>div {
     border-radius: 10px !important;
 }
+
+/* Daftar sesi chat */
+.tp-session-list-item {
+    font-size: 0.82rem;
+    color: var(--tp-slate-600);
+    padding: 2px 4px;
+}
+.tp-session-active-label {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--tp-indigo-700);
+    padding: 4px 8px;
+    background: var(--tp-indigo-50);
+    border-radius: 8px;
+    margin-bottom: 4px;
+}
+.tp-session-empty {
+    font-size: 0.78rem;
+    color: var(--tp-slate-600);
+    font-style: italic;
+    padding: 4px 0;
+}
+
+/* Tombol "+ Sesi Baru" beda warna dari tombol biasa */
+.tp-newsession-btn button {
+    background: var(--tp-emerald-500) !important;
+}
+.tp-newsession-btn button:hover {
+    background: #059669 !important;
+}
 </style>
 """
 
@@ -196,6 +226,16 @@ def render_section_title(icon: str, title: str) -> str:
 def render_chat_bubble(role: str, content_html: str) -> str:
     css_class = "tp-bubble-user" if role == "user" else "tp-bubble-assistant"
     return f'<div class="{css_class}">{content_html}</div>'
+
+
+def format_session_time(updated_at: str) -> str:
+    """Format timestamp ISO Supabase jadi label pendek 'dd Mon, HH:MM'."""
+    try:
+        from datetime import datetime
+        dt = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+        return dt.strftime("%d %b, %H:%M")
+    except Exception:
+        return ""
 
 
 def render_guardrail_status(blocked_count: int) -> str:

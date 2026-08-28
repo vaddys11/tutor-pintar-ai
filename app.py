@@ -1,12 +1,21 @@
 import os
+import base64
+import io
 import streamlit as st
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
 from PIL import Image
 import pypdf
 
-from db import get_supabase_client, new_session_id, save_message, load_history, session_exists
+from llm import get_openrouter_client, generate_response_with_fallback, fetch_free_models
+
+from db import (
+    get_supabase_client,
+    new_session_id,
+    save_message,
+    load_history,
+    get_all_sessions,
+    update_session_title,
+)
 from export import generate_pdf
 from guardrail import (
     detect_jailbreak_attempt,
@@ -23,6 +32,7 @@ from ui import (
     render_section_title,
     render_chat_bubble,
     render_guardrail_status,
+    format_session_time,
 )
 
 # -----------------------------------------------------------------------------
@@ -39,23 +49,20 @@ st.set_page_config(
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 st.markdown(LUCIDE_SCRIPT, unsafe_allow_html=True)
 
-api_key = os.getenv("GEMINI_API_KEY")
+api_key = os.getenv("OPENROUTER_API_KEY")
 
 if not api_key:
-    api_key = st.sidebar.text_input("🔑 Masukkan Gemini API Key:", type="password")
+    api_key = st.sidebar.text_input("🔑 Masukkan OpenRouter API Key:", type="password")
+    if api_key:
+        os.environ["OPENROUTER_API_KEY"] = api_key
 
 if not api_key:
-    st.info("👋 Masukkan Gemini API Key di sidebar atau file .env untuk mulai.")
+    st.info("👋 Masukkan OpenRouter API Key di sidebar atau file .env untuk mulai.")
     st.stop()
 
-
-@st.cache_resource
-def get_client(key: str):
-    return genai.Client(api_key=key)
-
-
-client = get_client(api_key)
+client = get_openrouter_client()
 supabase = get_supabase_client()
+free_models = fetch_free_models(api_key)
 
 # -----------------------------------------------------------------------------
 # 2. State Awal
@@ -66,6 +73,8 @@ if "session_id" not in st.session_state:
     st.session_state.session_id = new_session_id()
 if "blocked_count" not in st.session_state:
     st.session_state.blocked_count = 0
+if "last_model" not in st.session_state:
+    st.session_state.last_model = None
 
 # -----------------------------------------------------------------------------
 # 3. Sidebar: Pengaturan, Sesi, Upload, Ekspor, Guardrail
@@ -86,17 +95,62 @@ with st.sidebar:
     if supabase is None:
         st.warning("Supabase belum terhubung. Set SUPABASE_URL & SUPABASE_KEY di .env untuk simpan riwayat.")
     else:
-        st.text_input("Kode Sesi Kamu", value=st.session_state.session_id, disabled=True,
-                       help="Catat kode ini buat lanjut belajar nanti.")
-        load_code = st.text_input("Lanjut sesi lama? Masukkan kode:", key="load_code_input")
-        if st.button("📂 Muat Sesi"):
-            if load_code and session_exists(supabase, load_code):
-                st.session_state.session_id = load_code
-                st.session_state.messages = load_history(supabase, load_code)
-                st.success("Riwayat berhasil dimuat!")
-                st.rerun()
-            else:
-                st.error("Kode sesi gak ditemukan.")
+        # Tombol "+ Sesi Baru" paling atas
+        st.markdown('<div class="tp-newsession-btn">', unsafe_allow_html=True)
+        if st.button("＋ Sesi Baru", key="btn_new_session", use_container_width=True):
+            st.session_state.session_id = new_session_id()
+            st.session_state.messages = []
+            st.session_state.renaming_id = None
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        if "renaming_id" not in st.session_state:
+            st.session_state.renaming_id = None
+
+        sessions = get_all_sessions(supabase)
+
+        if not sessions:
+            st.markdown('<div class="tp-session-empty">Belum ada sesi tersimpan — mulai ngobrol dulu!</div>',
+                        unsafe_allow_html=True)
+        else:
+            for sess in sessions:
+                sid = sess["session_id"]
+                title = sess.get("title") or "Percakapan Baru"
+                time_label = format_session_time(sess.get("updated_at", ""))
+                is_active = sid == st.session_state.session_id
+
+                if st.session_state.renaming_id == sid:
+                    # --- Mode edit judul ---
+                    new_title = st.text_input(
+                        "Judul baru", value=title, key=f"rename_input_{sid}", label_visibility="collapsed"
+                    )
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if st.button("Simpan", key=f"save_rename_{sid}", use_container_width=True):
+                            update_session_title(supabase, sid, new_title)
+                            st.session_state.renaming_id = None
+                            st.rerun()
+                    with c2:
+                        if st.button("Batal", key=f"cancel_rename_{sid}", use_container_width=True):
+                            st.session_state.renaming_id = None
+                            st.rerun()
+                else:
+                    row_label = title if is_active else title
+                    col_main, col_edit = st.columns([5, 1])
+                    with col_main:
+                        prefix = "🟢 " if is_active else ""
+                        if st.button(f"{prefix}{row_label}", key=f"open_session_{sid}", use_container_width=True):
+                            if not is_active:
+                                st.session_state.session_id = sid
+                                st.session_state.messages = load_history(supabase, sid)
+                                st.session_state.renaming_id = None
+                                st.rerun()
+                    with col_edit:
+                        if st.button("✏️", key=f"edit_btn_{sid}"):
+                            st.session_state.renaming_id = sid
+                            st.rerun()
+                    if time_label:
+                        st.markdown(f'<div class="tp-session-list-item">{time_label}</div>', unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown(render_section_title("image", "Upload Foto Soal"), unsafe_allow_html=True)
@@ -136,6 +190,14 @@ with st.sidebar:
     st.markdown("---")
     st.markdown(render_section_title("shield", "Status Guardrail"), unsafe_allow_html=True)
     st.markdown(render_guardrail_status(st.session_state.blocked_count), unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown(render_section_title("cpu", "Status Model AI"), unsafe_allow_html=True)
+    st.caption(f"📡 {len(free_models)} model gratis terdeteksi live dari OpenRouter")
+    if st.session_state.get("last_model"):
+        st.caption(f"🤖 Terakhir merespons: **{st.session_state.last_model}**")
+    else:
+        st.caption("Belum ada respons dari AI di sesi ini.")
 
 # -----------------------------------------------------------------------------
 # 4. Dynamic System Instruction Sesuai Jenjang
@@ -195,6 +257,8 @@ st.markdown(render_hero(jenjang), unsafe_allow_html=True)
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(render_chat_bubble(message["role"], message["content"]), unsafe_allow_html=True)
+        if message["role"] == "assistant" and message.get("model"):
+            st.caption(f"🤖 {message['model']}")
 
 
 def speak_text(text):
@@ -209,42 +273,58 @@ def speak_text(text):
     st.components.v1.html(js_code, height=0)
 
 
-def build_contents(history: list[dict], pdf_ctx: str, image=None) -> list:
-    """Susun contents buat dikirim ke Gemini dari riwayat chat + konteks PDF + gambar."""
-    contents = []
+def _image_to_data_url(uploaded_file) -> str:
+    """Convert file upload gambar jadi data URL base64, format yang diterima OpenRouter vision."""
+    img = Image.open(uploaded_file).convert("RGB")
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    return f"data:image/jpeg;base64,{b64}"
+
+
+def build_messages(history: list[dict], pdf_ctx: str, image=None) -> list:
+    """Susun messages format OpenAI (role/content) dari riwayat chat + konteks PDF + gambar."""
+    messages = []
     if pdf_ctx:
-        contents.append(types.Part.from_text(text=f"[DOKUMEN ACUAN/BUKU]:\n{pdf_ctx[:4000]}"))
-    for msg in history:
-        role = "user" if msg["role"] == "user" else "model"
-        contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
-    if image is not None:
-        contents.append(Image.open(image))
-    return contents
+        messages.append({"role": "system", "content": f"[DOKUMEN ACUAN/BUKU]:\n{pdf_ctx[:4000]}"})
+
+    last_user_index = max((i for i, m in enumerate(history) if m["role"] == "user"), default=-1)
+
+    for i, msg in enumerate(history):
+        role = "user" if msg["role"] == "user" else "assistant"
+        # Gambar cuma dilampirkan ke pesan user terakhir, biar gak dobel tiap giliran
+        if image is not None and i == last_user_index:
+            messages.append({
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": msg["content"]},
+                    {"type": "image_url", "image_url": {"url": _image_to_data_url(image)}},
+                ],
+            })
+        else:
+            messages.append({"role": role, "content": msg["content"]})
+    return messages
 
 
-def handle_model_call(instruction: str, temperature: float, spinner_text: str) -> str | None:
-    """Panggil Gemini, return teks respons atau None kalau error (sudah ditampilkan)."""
+def handle_model_call(instruction: str, temperature: float, spinner_text: str) -> tuple[str | None, str | None]:
+    """Panggil AI via OpenRouter dengan fallback multi-model. Return (teks_respons, label_model) atau (None, None)."""
     with st.spinner(spinner_text):
-        try:
-            contents = build_contents(st.session_state.messages, pdf_context, uploaded_image)
-            response = client.models.generate_content(
-                model="gemini-3.6-flash",
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    system_instruction=instruction,
-                    temperature=temperature,
-                )
-            )
-            bot_reply = response.text
+        history_messages = build_messages(st.session_state.messages, pdf_context, uploaded_image)
+        messages = [{"role": "system", "content": instruction}] + history_messages
 
-            # Guardrail: cek ringan kalau respons kelewat instan
-            if check_output_too_direct(bot_reply):
-                bot_reply += "\n\n⚠️ *Tutor mendeteksi jawaban ini terlalu langsung — coba tetap pikirkan ulang prosesnya ya!*"
+        bot_reply, model_label = generate_response_with_fallback(
+            client, messages, temperature=temperature, free_models=free_models
+        )
 
-            return bot_reply
-        except Exception as e:
-            st.error(f"Terjadi kesalahan teknis: {str(e)}")
-            return None
+        if bot_reply is None:
+            st.error("Semua model AI gratis sedang penuh atau gagal merespons. Coba lagi sesaat lagi.")
+            return None, None
+
+        # Guardrail: cek ringan kalau respons kelewat instan
+        if check_output_too_direct(bot_reply):
+            bot_reply += "\n\n⚠️ *Tutor mendeteksi jawaban ini terlalu langsung — coba tetap pikirkan ulang prosesnya ya!*"
+
+        return bot_reply, model_label
 
 # -----------------------------------------------------------------------------
 # 6. Tombol Kuis Adaptif
@@ -265,15 +345,17 @@ if btn_quiz:
             3. DILARANG KERAS memberikan kunci jawaban, pembahasannya, atau solusinya terlebih dahulu.
             4. Berikan dorongan agar pengguna mencoba menjawabnya sendiri.
             """
-            bot_reply = handle_model_call(
+            bot_reply, model_label = handle_model_call(
                 quiz_instruction, 0.7,
                 f"Menyiapkan 2 soal latihan adaptif untuk tingkat {jenjang.split()[0]}..."
             )
             if bot_reply:
                 st.markdown(render_chat_bubble("assistant", bot_reply), unsafe_allow_html=True)
+                st.caption(f"🤖 {model_label}")
                 if enable_tts:
                     speak_text(bot_reply)
-                st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+                st.session_state.messages.append({"role": "assistant", "content": bot_reply, "model": model_label})
+                st.session_state.last_model = model_label
                 save_message(supabase, st.session_state.session_id, jenjang, "assistant", bot_reply)
                 st.rerun()
 
@@ -301,13 +383,16 @@ if prompt := st.chat_input("Tanyakan materi atau konsep pelajaran di sini..."):
         st.rerun()
     else:
         with st.chat_message("assistant"):
-            bot_reply = handle_model_call(
+            bot_reply, model_label = handle_model_call(
                 SYSTEM_INSTRUCTION, 0.6,
                 f"Tutor sedang menyiapkan petunjuk untuk tingkat {jenjang.split()[0]}..."
             )
             if bot_reply:
                 st.markdown(render_chat_bubble("assistant", bot_reply), unsafe_allow_html=True)
+                st.caption(f"🤖 {model_label}")
                 if enable_tts:
                     speak_text(bot_reply)
-                st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+                st.session_state.messages.append({"role": "assistant", "content": bot_reply, "model": model_label})
+                st.session_state.last_model = model_label
                 save_message(supabase, st.session_state.session_id, jenjang, "assistant", bot_reply)
+                st.rerun()
