@@ -23,6 +23,7 @@ from db import (
     load_history,
     get_all_sessions,
     update_session_title,
+    delete_session,
     session_exists,
 )
 from guardrail import detect_jailbreak_attempt, log_attempt, guardrail_refusal_message, check_output_too_direct
@@ -34,13 +35,10 @@ load_dotenv()
 app = FastAPI(title="Tutor Pintar AI — Backend")
 
 # --- CORS: izinkan frontend Next.js lokal ---
-raw_origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:3000")
-origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
-
+FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins if origins else ["*"],
-    allow_origin_regex=r"https://.*\.vercel\.app",  # Otomatis izinkan semua sub-domain Vercel
+    allow_origins=FRONTEND_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -161,6 +159,19 @@ def rename_session(session_id: str, payload: RenameRequest):
     ok = update_session_title(supabase, session_id, payload.title)
     if not ok:
         raise HTTPException(status_code=400, detail="Gagal rename sesi")
+    return {"success": True}
+
+
+# -----------------------------------------------------------------------------
+# DELETE /api/sessions/{session_id} — hapus sesi total (chat_history + sessions)
+# -----------------------------------------------------------------------------
+@app.delete("/api/sessions/{session_id}")
+def remove_session(session_id: str):
+    if supabase is None:
+        raise HTTPException(status_code=503, detail="Supabase belum terhubung")
+    ok = delete_session(supabase, session_id)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Gagal hapus sesi")
     return {"success": True}
 
 

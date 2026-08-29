@@ -133,6 +133,19 @@ def update_session_title(client: Client, session_id: str, new_title: str) -> boo
         return False
 
 
+def delete_session(client: Client, session_id: str) -> bool:
+    """Hapus sesi total: semua pesan di chat_history + baris di sessions. Return True kalau sukses."""
+    if client is None or not session_id:
+        return False
+    try:
+        client.table("chat_history").delete().eq("session_id", session_id).execute()
+        client.table("sessions").delete().eq("session_id", session_id).execute()
+        return True
+    except Exception as e:
+        print(f"[db] Gagal hapus sesi: {e}")
+        return False
+
+
 def session_exists(client: Client, session_id: str) -> bool:
     """Cek apakah session_id ada di tabel sessions."""
     if client is None or not session_id:

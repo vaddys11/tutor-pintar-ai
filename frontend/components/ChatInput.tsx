@@ -31,7 +31,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   };
 
   return (
-    <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-100">
+    <div className="flex items-end gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-100 sm:gap-2 sm:p-3">
       <MicButton onTranscript={handleTranscript} disabled={disabled} />
       <textarea
         value={value}
@@ -40,7 +40,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         placeholder="Tanyakan materi atau konsep pelajaran di sini..."
         rows={1}
         disabled={disabled}
-        className="max-h-32 flex-1 resize-none bg-transparent py-2.5 text-slate-800 outline-none placeholder:text-slate-400 disabled:opacity-60"
+        className="max-h-32 min-w-0 flex-1 resize-none bg-transparent py-2.5 text-base text-slate-800 outline-none placeholder:text-slate-400 disabled:opacity-60"
       />
       <button
         type="button"

@@ -11,6 +11,7 @@ import {
 import {
   apiChat,
   apiCreateSession,
+  apiDeleteSession,
   apiExportPdf,
   apiGetGuardrailStatus,
   apiGetMessages,
@@ -18,6 +19,7 @@ import {
   apiRenameSession,
 } from "@/lib/api";
 import { JENJANG_OPTIONS, QUIZ_TRIGGER_MESSAGE, type Message, type SessionItem } from "@/lib/types";
+import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 
 interface ChatContextValue {
   sessions: SessionItem[];
@@ -33,9 +35,21 @@ interface ChatContextValue {
   createNewSession: () => Promise<void>;
   selectSession: (sessionId: string) => Promise<void>;
   renameSession: (sessionId: string, title: string) => Promise<void>;
+  deleteSession: (sessionId: string) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
   sendQuizRequest: () => Promise<void>;
   exportPdf: () => Promise<void>;
+  // Sidebar mobile (drawer)
+  sidebarOpen: boolean;
+  toggleSidebar: () => void;
+  closeSidebar: () => void;
+  // Text-to-Speech
+  autoSpeak: boolean;
+  toggleAutoSpeak: () => void;
+  isSpeaking: boolean;
+  ttsSupported: boolean | null;
+  speakText: (text: string) => void;
+  stopSpeaking: () => void;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -49,8 +63,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [isSending, setIsSending] = useState(false);
   const [blockedCount, setBlockedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [autoSpeak, setAutoSpeak] = useState(false);
+
+  const { isSpeaking, isSupported: ttsSupported, speak, stop: stopSpeaking } = useSpeechSynthesis("id-ID");
 
   const clearError = useCallback(() => setError(null), []);
+  const toggleSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
+  const toggleAutoSpeak = useCallback(() => {
+    setAutoSpeak((v) => {
+      if (v) stopSpeaking(); // lagi ngomong pas dimatiin -> langsung berhenti
+      return !v;
+    });
+  }, [stopSpeaking]);
+  const speakText = useCallback((text: string) => speak(text), [speak]);
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -74,20 +101,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const createNewSession = useCallback(async () => {
     setError(null);
+    stopSpeaking();
     try {
       const { session_id } = await apiCreateSession(jenjang);
       setActiveSessionId(session_id);
       setMessages([]);
       setBlockedCount(0);
+      closeSidebar();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Gagal bikin sesi baru");
     }
-  }, [jenjang]);
+  }, [jenjang, stopSpeaking, closeSidebar]);
 
   const selectSession = useCallback(
     async (sessionId: string) => {
       setError(null);
+      stopSpeaking();
       setActiveSessionId(sessionId);
+      closeSidebar();
       try {
         const [msgs, guard] = await Promise.all([
           apiGetMessages(sessionId),
@@ -103,7 +134,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         setError(e instanceof Error ? e.message : "Gagal muat riwayat sesi");
       }
     },
-    [sessions]
+    [sessions, stopSpeaking, closeSidebar]
   );
 
   const renameSession = useCallback(
@@ -118,9 +149,29 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     [refreshSessions]
   );
 
+  const deleteSession = useCallback(
+    async (sessionId: string) => {
+      setError(null);
+      try {
+        await apiDeleteSession(sessionId);
+        if (sessionId === activeSessionId) {
+          stopSpeaking();
+          setActiveSessionId(null);
+          setMessages([]);
+          setBlockedCount(0);
+        }
+        await refreshSessions();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Gagal hapus sesi");
+      }
+    },
+    [activeSessionId, refreshSessions, stopSpeaking]
+  );
+
   const sendMessageInternal = useCallback(
     async (text: string, mode: "chat" | "quiz") => {
       setError(null);
+      stopSpeaking();
       let sid = activeSessionId;
 
       // Auto-bikin sesi kalau user langsung ngetik tanpa pencet "Sesi Baru" dulu
@@ -141,6 +192,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         const res = await apiChat(sid, jenjang, text, mode);
         setMessages((prev) => [...prev, { role: "assistant", content: res.reply, model: res.model }]);
         if (res.blocked) setBlockedCount((c) => c + 1);
+        if (autoSpeak) speak(res.reply); // baca otomatis balasan AI kalau fitur TTS aktif
         await refreshSessions(); // biar judul/urutan sidebar ke-update (auto-title dari backend)
       } catch (e) {
         setError(e instanceof Error ? e.message : "Gagal kirim pesan, coba lagi.");
@@ -149,7 +201,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         setIsSending(false);
       }
     },
-    [activeSessionId, jenjang, refreshSessions]
+    [activeSessionId, jenjang, refreshSessions, autoSpeak, speak, stopSpeaking]
   );
 
   const sendMessage = useCallback((text: string) => sendMessageInternal(text, "chat"), [sendMessageInternal]);
@@ -192,9 +244,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         createNewSession,
         selectSession,
         renameSession,
+        deleteSession,
         sendMessage,
         sendQuizRequest,
         exportPdf,
+        sidebarOpen,
+        toggleSidebar,
+        closeSidebar,
+        autoSpeak,
+        toggleAutoSpeak,
+        isSpeaking,
+        ttsSupported,
+        speakText,
+        stopSpeaking,
       }}
     >
       {children}

@@ -12,7 +12,7 @@ export function MessageBubble({ role, content, model }: MessageBubbleProps) {
   return (
     <div className={`flex items-end gap-2.5 ${isUser ? "flex-row-reverse" : ""}`}>
       <Avatar role={role} />
-      <div className={`flex max-w-[78%] flex-col ${isUser ? "items-end" : "items-start"}`}>
+      <div className={`flex max-w-[88%] min-w-0 flex-col sm:max-w-[78%] ${isUser ? "items-end" : "items-start"}`}>
         <div
           className={`whitespace-pre-wrap break-words px-4 py-3 leading-relaxed shadow-sm ${
             isUser

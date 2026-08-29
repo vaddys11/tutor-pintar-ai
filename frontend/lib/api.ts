@@ -1,8 +1,6 @@
 import type { SessionItem } from "./types";
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  "https://tutor-pintar-ai-production.up.railway.app";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 async function handleJson<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -18,9 +16,7 @@ async function handleJson<T>(res: Response): Promise<T> {
   return res.json();
 }
 
-export async function apiCreateSession(
-  jenjang: string,
-): Promise<{ session_id: string }> {
+export async function apiCreateSession(jenjang: string): Promise<{ session_id: string }> {
   const res = await fetch(`${API_BASE_URL}/api/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -30,28 +26,20 @@ export async function apiCreateSession(
 }
 
 export async function apiListSessions(): Promise<SessionItem[]> {
-  const res = await fetch(`${API_BASE_URL}/api/sessions`, {
+  const res = await fetch(`${API_BASE_URL}/api/sessions`, { cache: "no-store" });
+  return handleJson(res);
+}
+
+export async function apiGetMessages(
+  sessionId: string
+): Promise<{ role: string; content: string }[]> {
+  const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/messages`, {
     cache: "no-store",
   });
   return handleJson(res);
 }
 
-export async function apiGetMessages(
-  sessionId: string,
-): Promise<{ role: string; content: string }[]> {
-  const res = await fetch(
-    `${API_BASE_URL}/api/sessions/${sessionId}/messages`,
-    {
-      cache: "no-store",
-    },
-  );
-  return handleJson(res);
-}
-
-export async function apiRenameSession(
-  sessionId: string,
-  title: string,
-): Promise<{ success: boolean }> {
+export async function apiRenameSession(sessionId: string, title: string): Promise<{ success: boolean }> {
   const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -60,15 +48,17 @@ export async function apiRenameSession(
   return handleJson(res);
 }
 
-export async function apiGetGuardrailStatus(
-  sessionId: string,
-): Promise<{ blocked_count: number }> {
-  const res = await fetch(
-    `${API_BASE_URL}/api/sessions/${sessionId}/guardrail`,
-    {
-      cache: "no-store",
-    },
-  );
+export async function apiDeleteSession(sessionId: string): Promise<{ success: boolean }> {
+  const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}`, {
+    method: "DELETE",
+  });
+  return handleJson(res);
+}
+
+export async function apiGetGuardrailStatus(sessionId: string): Promise<{ blocked_count: number }> {
+  const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/guardrail`, {
+    cache: "no-store",
+  });
   return handleJson(res);
 }
 
@@ -76,7 +66,7 @@ export async function apiChat(
   sessionId: string,
   jenjang: string,
   message: string,
-  mode: "chat" | "quiz" = "chat",
+  mode: "chat" | "quiz" = "chat"
 ): Promise<{ reply: string; model: string | null; blocked: boolean }> {
   const res = await fetch(`${API_BASE_URL}/api/chat`, {
     method: "POST",

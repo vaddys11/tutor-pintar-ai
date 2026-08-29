@@ -52,6 +52,14 @@ export function useSpeechRecognition({
     recognition.onresult = (event: any) => {
       const transcript = event.results?.[0]?.[0]?.transcript;
       if (transcript) onResult(transcript);
+      // Stop eksplisit begitu hasil final didapat — jangan nunggu browser
+      // nge-detect akhir ucapan sendiri (kadang lambat/gak konsisten).
+      recognition.stop();
+    };
+    // Fallback: browser deteksi user udah selesai ngomong (jeda diam) ->
+    // paksa stop juga, buat browser yang lambat ngirim onresult.
+    recognition.onspeechend = () => {
+      recognition.stop();
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onerror = (event: any) => {
@@ -73,6 +81,7 @@ export function useSpeechRecognition({
       recognition.onresult = null;
       recognition.onerror = null;
       recognition.onend = null;
+      recognition.onspeechend = null;
       recognitionRef.current = null;
     };
   }, [lang, onResult, onError]);
