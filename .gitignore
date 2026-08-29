@@ -1,5 +1,25 @@
-.env
+# --- Backend (Python) ---
 __pycache__/
-.streamlit/
-*.pyc
-.continue/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+*.log
+
+# --- Frontend (Node/Next.js) ---
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
+
+# --- Env files (JANGAN commit secret) ---
+.env
+.env.local
+.env.*.local
+!*.env.example
+!.env.local.example
+
+# --- OS/editor ---
+.DS_Store
+.vscode/
+.idea/
