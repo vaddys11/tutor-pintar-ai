@@ -37,10 +37,14 @@ load_dotenv()
 app = FastAPI(title="Tutor Pintar AI — Backend")
 
 # --- CORS: izinkan frontend Next.js lokal ---
-FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "http://localhost:3000").split(",")
+FRONTEND_ORIGINS = os.getenv(
+    "FRONTEND_ORIGINS", 
+    "http://localhost:3000,https://tutor-pintar-ai.vercel.app"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=FRONTEND_ORIGINS,
+    allow_origins=["*"] if "*" in FRONTEND_ORIGINS else [origin.strip() for origin in FRONTEND_ORIGINS],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
