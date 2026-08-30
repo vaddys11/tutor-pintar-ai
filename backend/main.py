@@ -55,7 +55,10 @@ FRONTEND_ORIGINS = os.getenv(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if "*" in FRONTEND_ORIGINS else [origin.strip() for origin in FRONTEND_ORIGINS],
+    allow_origins=[
+        "https://tutor-pintar-ai.vercel.app",
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
