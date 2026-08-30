@@ -7,6 +7,7 @@ Streamlit widget jadi endpoint REST buat dikonsumsi frontend Next.js.
 import os
 import re
 from datetime import datetime
+from contextlib import asynccontextmanager
 from typing import Literal, Optional
 
 from dotenv import load_dotenv
@@ -34,7 +35,17 @@ from modules import router as modules_router
 
 load_dotenv()
 
-app = FastAPI(title="Tutor Pintar AI — Backend")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load model embedding saat server startup agar tidak timeout di tengah chat
+    try:
+        search_relevant_chunks(None, "test", "SD (Sekolah Dasar)", top_k=1)
+        print("Model embedding berhasil dimuat saat startup!")
+    except Exception as e:
+        print(f"Warning startup embedding: {e}")
+    yield
+
+app = FastAPI(title="Tutor Pintar AI — Backend", lifespan=lifespan)
 
 # --- CORS: izinkan frontend Next.js lokal ---
 FRONTEND_ORIGINS = os.getenv(
