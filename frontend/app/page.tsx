@@ -1,11 +1,5 @@
-import { Sidebar } from "@/components/Sidebar";
-import { ChatWindow } from "@/components/ChatWindow";
+import { AppShell } from "@/components/AppShell";
 
 export default function Home() {
-  return (
-    <main className="flex h-screen w-full overflow-hidden">
-      <Sidebar />
-      <ChatWindow />
-    </main>
-  );
+  return <AppShell />;
 }

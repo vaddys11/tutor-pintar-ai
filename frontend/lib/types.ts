@@ -22,3 +22,16 @@ export interface SessionItem {
 
 export const QUIZ_TRIGGER_MESSAGE =
   "📝 Tolong buatkan 2 soal latihan adaptif berdasarkan materi yang telah kita bahas untuk menguji pemahamanku.";
+
+export interface CurriculumModule {
+  id: string;
+  title: string;
+  jenjang: string;
+  mata_pelajaran: string;
+  source_type: "upload" | "text";
+  original_filename?: string | null;
+  status: "aktif" | "nonaktif";
+  processing_status: "processing" | "ready" | "failed";
+  chunk_count: number;
+  created_at: string;
+}

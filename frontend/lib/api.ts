@@ -1,4 +1,4 @@
-import type { SessionItem } from "./types";
+import type { CurriculumModule, SessionItem } from "./types";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
@@ -112,4 +112,69 @@ export async function apiExportPdf(sessionId: string): Promise<Blob> {
     throw new Error(detail);
   }
   return res.blob();
+}
+
+// --- Kelola Modul Kurikulum (RAG) ---
+
+export async function apiListModules(): Promise<CurriculumModule[]> {
+  const res = await fetch(`${API_BASE_URL}/api/modules`, { cache: "no-store" });
+  return handleJson(res);
+}
+
+export async function apiUploadModule(
+  file: File,
+  title: string,
+  jenjang: string,
+  mataPelajaran: string,
+): Promise<CurriculumModule> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("title", title);
+  formData.append("jenjang", jenjang);
+  formData.append("mata_pelajaran", mataPelajaran);
+  const res = await fetch(`${API_BASE_URL}/api/modules/upload`, {
+    method: "POST",
+    body: formData, // JANGAN set Content-Type manual — browser yang atur boundary multipart
+  });
+  return handleJson(res);
+}
+
+export async function apiAddModuleText(
+  title: string,
+  jenjang: string,
+  mataPelajaran: string,
+  content: string,
+): Promise<CurriculumModule> {
+  const res = await fetch(`${API_BASE_URL}/api/modules/text`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title,
+      jenjang,
+      mata_pelajaran: mataPelajaran,
+      content,
+    }),
+  });
+  return handleJson(res);
+}
+
+export async function apiUpdateModuleStatus(
+  id: string,
+  status: "aktif" | "nonaktif",
+): Promise<{ success: boolean }> {
+  const res = await fetch(`${API_BASE_URL}/api/modules/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  return handleJson(res);
+}
+
+export async function apiDeleteModule(
+  id: string,
+): Promise<{ success: boolean }> {
+  const res = await fetch(`${API_BASE_URL}/api/modules/${id}`, {
+    method: "DELETE",
+  });
+  return handleJson(res);
 }

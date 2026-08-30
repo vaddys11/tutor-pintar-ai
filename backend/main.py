@@ -29,6 +29,8 @@ from db import (
 from guardrail import detect_jailbreak_attempt, log_attempt, guardrail_refusal_message, check_output_too_direct
 from export import generate_pdf
 from prompts import build_system_instruction, VALID_JENJANG, QUIZ_TRIGGER_MESSAGE
+from curriculum import search_relevant_chunks
+from modules import router as modules_router
 
 load_dotenv()
 
@@ -43,6 +45,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(modules_router)
 
 # --- Client & resource level-module (mirip @st.cache_resource di versi Streamlit) ---
 openrouter_client = get_openrouter_client()
@@ -219,6 +223,16 @@ def chat(payload: ChatRequest):
     # --- Susun messages format OpenAI dari riwayat tersimpan ---
     history = load_history(supabase, session_id)  # sudah termasuk pesan user barusan
     system_instruction = build_system_instruction(jenjang, is_quiz=is_quiz)
+
+    # --- RAG: selipkan materi kurikulum relevan (cuma dari modul status 'aktif') ---
+    relevant_chunks = search_relevant_chunks(supabase, user_message, jenjang, top_k=4)
+    if relevant_chunks:
+        context_block = "\n\n".join(f"- {c['content']}" for c in relevant_chunks)
+        system_instruction += (
+            "\n\n[MATERI KURIKULUM RELEVAN — gunakan sebagai referensi utama kalau cocok "
+            f"dengan pertanyaan siswa]:\n{context_block}"
+        )
+
     messages = [{"role": "system", "content": system_instruction}]
     for msg in history:
         role = "user" if msg["role"] == "user" else "assistant"

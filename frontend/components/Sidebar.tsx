@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, GraduationCap, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, GraduationCap, Loader2, Pencil, Plus, Settings, Trash2, X } from "lucide-react";
 import { useChat } from "@/context/ChatContext";
 import { JENJANG_OPTIONS } from "@/lib/types";
 
@@ -18,7 +18,11 @@ function formatSessionTime(iso: string): string {
   }
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  onOpenModuleManager: () => void;
+}
+
+export function Sidebar({ onOpenModuleManager }: SidebarProps) {
   const {
     sessions,
     sessionsLoading,
@@ -231,8 +235,18 @@ export function Sidebar() {
           })}
         </div>
 
+        {/* Kelola Modul Kurikulum (admin) */}
+        <div className="border-t border-white/10 px-4 pt-3">
+          <button
+            onClick={onOpenModuleManager}
+            className="mb-3 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <Settings size={14} /> Kelola Modul Kurikulum
+          </button>
+        </div>
+
         {/* Guardrail status */}
-        <div className="border-t border-white/10 px-4 py-3">
+        <div className="px-4 pb-4">
           <div
             className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${
               blockedCount === 0
