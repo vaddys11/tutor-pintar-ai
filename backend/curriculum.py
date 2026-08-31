@@ -6,15 +6,14 @@ ke Supabase (pgvector) -> similarity search saat chat (cuma modul status aktif).
 import io
 import os
 import re
-import requests
 from typing import Optional
 
 import pypdf
+from sentence_transformers import SentenceTransformer
 from supabase import Client
 
-HF_TOKEN = os.getenv("HF_TOKEN")
-# Menggunakan Serverless API resmi dari Hugging Face untuk model MiniLM-L6-v2
-HF_API_URL = "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2"
+# Inisialisasi model lokal (akan di-download otomatis saat aplikasi start di Railway)
+model_embedding = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 EMBEDDING_DIMENSIONS = 384
 CHUNK_SIZE = 600
