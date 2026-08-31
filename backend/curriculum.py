@@ -1,25 +1,7 @@
 """
 curriculum.py — Pipeline RAG buat fitur "Kelola Modul Kurikulum":
-ekstraksi teks (PDF/TXT/MD) -> chunking -> embedding (lokal, gratis) -> simpan
+ekstraksi teks (PDF/TXT/MD) -> chunking -> embedding (HF API) -> simpan
 ke Supabase (pgvector) -> similarity search saat chat (cuma modul status aktif).
-
-Embedding pakai sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 —
-jalan LOKAL di server (bukan panggil API luar), lisensi Apache-2.0, 100% gratis,
-dukung resmi 50+ bahasa termasuk Indonesia. 384 dimensi (beda dari model OpenAI
-yang 1536 — jangan dicampur, lihat migrations/003 kalau upgrade dari versi lama).
-
-Trade-off yang perlu disadari:
-- Model ini punya max_seq_length 128 token (~90-100 kata Indonesia). Chunk 600
-  karakter kita kadang sedikit lebih panjang dari itu — bagian ekor chunk yang
-  kepotong pas dibikin vector (teks aslinya tetap tersimpan utuh di DB, cuma
-  representasi embedding-nya yang gak "melihat" ekor chunk kalau kepanjangan).
-  Bukan bug, cuma karakteristik model kecil/cepat ini.
-- Model (~470MB) di-download sekali dari HuggingFace pas pertama kali dipanggil,
-  lalu di-cache di memory proses. Request pertama setelah server nyala/deploy
-  ulang bakal terasa lebih lambat (nunggu download+load model).
-- Nambah dependency berat (torch + transformers) ke requirements.txt — install
-  & build time di Railway jadi lebih lama, image lebih besar. Ini trade-off
-  wajar buat dapetin embedding gratis tanpa API luar.
 """
 import io
 import os
@@ -38,6 +20,50 @@ EMBEDDING_DIMENSIONS = 384
 CHUNK_SIZE = 600
 CHUNK_OVERLAP = 60
 EMBEDDING_BATCH_SIZE = 50
+
+
+def extract_text_from_file(filename: str, content: bytes) -> str:
+    """Ekstrak teks mentah dari file upload sesuai ekstensi. Raise ValueError kalau format gak didukung."""
+    lower = filename.lower()
+    if lower.endswith(".pdf"):
+        reader = pypdf.PdfReader(io.BytesIO(content))
+        return "\n".join(page.extract_text() or "" for page in reader.pages)
+    if lower.endswith((".txt", ".md")):
+        return content.decode("utf-8", errors="ignore")
+    raise ValueError("Format file gak didukung. Cuma .pdf, .txt, atau .md.")
+
+
+def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
+    """
+    Pecah teks jadi potongan ~chunk_size karakter. Coba potong di batas newline/spasi
+    terdekat biar gak motong kata di tengah. Overlap kecil biar konteks antar-chunk nyambung.
+    """
+    clean = re.sub(r"\n{3,}", "\n\n", text).strip()
+    if not clean:
+        return []
+
+    chunks: list[str] = []
+    start = 0
+    length = len(clean)
+
+    while start < length:
+        end = min(start + chunk_size, length)
+        if end < length:
+            boundary = clean.rfind("\n", start, end)
+            if boundary <= start:
+                boundary = clean.rfind(" ", start, end)
+            if boundary > start:
+                end = boundary
+
+        piece = clean[start:end].strip()
+        if piece:
+            chunks.append(piece)
+
+        next_start = end - overlap
+        start = next_start if next_start > start else end
+
+    return chunks
+
 
 def get_embeddings_batch(texts: list[str]) -> Optional[list[list[float]]]:
     """
@@ -90,7 +116,7 @@ def process_and_store_document(supabase: Client, doc_id: str, raw_text: str) -> 
             batch = chunks[i : i + EMBEDDING_BATCH_SIZE]
             embeddings = get_embeddings_batch(batch)
             if embeddings is None:
-                raise RuntimeError("Embedding lokal gagal di-generate")
+                raise RuntimeError("Embedding API gagal di-generate")
             for j, (chunk, emb) in enumerate(zip(batch, embeddings)):
                 all_rows.append(
                     {"doc_id": doc_id, "chunk_index": i + j, "content": chunk, "embedding": emb}
@@ -118,10 +144,6 @@ def search_relevant_chunks(
     """
     Cari chunk kurikulum paling relevan buat query, HANYA dari modul berstatus 'aktif'
     dan sesuai jenjang (difilter di RPC Postgres `match_curriculum_chunks`).
-
-    Selalu return [] kalau gagal apapun sebabnya — RAG ini enhancement, bukan hal
-    yang boleh bikin fitur chat utama down kalau error (model gagal load, RPC belum
-    ada, dsb). Chat tetap jalan normal tanpa konteks kurikulum kalau ini gagal.
     """
     if supabase is None or not query.strip():
         return []
