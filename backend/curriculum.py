@@ -14,7 +14,7 @@ from supabase import Client
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 # Menggunakan Serverless API resmi dari Hugging Face untuk model MiniLM-L6-v2
-HF_API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
+HF_API_URL = "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2"
 
 EMBEDDING_DIMENSIONS = 384
 CHUNK_SIZE = 600
@@ -67,33 +67,18 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVE
 
 def get_embeddings_batch(texts: list[str]) -> Optional[list[list[float]]]:
     """
-    Generate embedding via Hugging Face Serverless API (Ringan, tanpa RAM server/PyTorch).
-    Return None kalau gagal — caller (process_and_store_document & search) tetep aman handle graceful.
+    Generate embedding secara lokal tanpa HTTP request/API luar.
     """
     if not texts:
         return None
         
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    payload = {
-        "inputs": texts,
-        "options": {"wait_for_model": True}
-    }
-    
     try:
-        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=30)
-        
-        if response.status_code == 200:
-            embeddings = response.json()
-            # Memastikan format balikan adalah list of vectors
-            if isinstance(embeddings, list):
-                return embeddings
-            return None
-        else:
-            print(f"[curriculum] HF API Error status {response.status_code}: {response.text}")
-            return None
-            
+        # Generate vektor embedding langsung di CPU server
+        embeddings = model_embedding.encode(texts, convert_to_numpy=True)
+        # Ubah numpy array ke list float standar Python
+        return embeddings.tolist()
     except Exception as e:
-        print(f"[curriculum] Gagal panggil HF API: {e}")
+        print(f"[curriculum] Gagal generate local embedding: {e}")
         return None
 
 
