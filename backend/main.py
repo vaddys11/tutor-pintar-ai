@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from typing import Literal, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -47,25 +47,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Tutor Pintar AI — Backend", lifespan=lifespan)
 
-# --- CORS: izinkan frontend Next.js lokal ---
-FRONTEND_ORIGINS = os.getenv(
-    "FRONTEND_ORIGINS", 
-    "http://localhost:3000,https://tutor-pintar-ai.vercel.app"
-).split(",")
+# --- Pasang Middleware CORS Manual (Menjamin Header Terkirim 100%) ---
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    # Langsung tangani preflight OPTIONS dari browser
+    if request.method == "OPTIONS":
+        response = Response()
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        return response
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://tutor-pintar-ai.vercel.app",
-        "https://tutor-pintar-ai.vercel.app/",
-        "http://localhost:3000",
-        "http://localhost:3000/",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
 
+# Hapus / Komentari CORSMiddleware bawaan sebelumnya, lalu lanjutkan router:
 app.include_router(modules_router)
 
 # --- Client & resource level-module (mirip @st.cache_resource di versi Streamlit) ---
