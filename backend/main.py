@@ -37,12 +37,7 @@ load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        print("Menguji koneksi Hugging Face API & Supabase...")
-        search_relevant_chunks(supabase, "test", "SD (Sekolah Dasar)", top_k=1)
-        print("Koneksi RAG via HF API siap!")
-    except Exception as e:
-        print(f"Warning: Tes startup RAG gagal (server tetap jalan): {e}")
+    print("Backend Tutor Pintar AI siap! (Embedding via HF API)")
     yield
 
 app = FastAPI(title="Tutor Pintar AI — Backend", lifespan=lifespan)
