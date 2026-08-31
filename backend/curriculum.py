@@ -22,89 +22,52 @@ Trade-off yang perlu disadari:
   wajar buat dapetin embedding gratis tanpa API luar.
 """
 import io
+import os
 import re
+import requests
 from typing import Optional
 
 import pypdf
 from supabase import Client
 
-EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+HF_TOKEN = os.getenv("HF_TOKEN")
+# Menggunakan Serverless API resmi dari Hugging Face untuk model MiniLM-L6-v2
+HF_API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
+
 EMBEDDING_DIMENSIONS = 384
 CHUNK_SIZE = 600
 CHUNK_OVERLAP = 60
 EMBEDDING_BATCH_SIZE = 50
 
-_model = None  # singleton, lazy-load biar gak makan RAM kalau fitur RAG gak pernah dipakai
-
-
-def _get_model():
-    """Load model embedding sekali aja (lazy singleton), dipakai ulang tiap panggilan berikutnya."""
-    global _model
-    if _model is None:
-        from sentence_transformers import SentenceTransformer
-
-        print(f"[curriculum] Loading model embedding '{EMBEDDING_MODEL_NAME}' (pertama kali, agak lama)...")
-        _model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-        print("[curriculum] Model embedding siap.")
-    return _model
-
-
-def extract_text_from_file(filename: str, content: bytes) -> str:
-    """Ekstrak teks mentah dari file upload sesuai ekstensi. Raise ValueError kalau format gak didukung."""
-    lower = filename.lower()
-    if lower.endswith(".pdf"):
-        reader = pypdf.PdfReader(io.BytesIO(content))
-        return "\n".join(page.extract_text() or "" for page in reader.pages)
-    if lower.endswith((".txt", ".md")):
-        return content.decode("utf-8", errors="ignore")
-    raise ValueError("Format file gak didukung. Cuma .pdf, .txt, atau .md.")
-
-
-def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
-    """
-    Pecah teks jadi potongan ~chunk_size karakter. Coba potong di batas newline/spasi
-    terdekat biar gak motong kata di tengah. Overlap kecil biar konteks antar-chunk nyambung.
-    """
-    clean = re.sub(r"\n{3,}", "\n\n", text).strip()
-    if not clean:
-        return []
-
-    chunks: list[str] = []
-    start = 0
-    length = len(clean)
-
-    while start < length:
-        end = min(start + chunk_size, length)
-        if end < length:
-            boundary = clean.rfind("\n", start, end)
-            if boundary <= start:
-                boundary = clean.rfind(" ", start, end)
-            if boundary > start:
-                end = boundary
-
-        piece = clean[start:end].strip()
-        if piece:
-            chunks.append(piece)
-
-        next_start = end - overlap
-        start = next_start if next_start > start else end
-
-    return chunks
-
-
 def get_embeddings_batch(texts: list[str]) -> Optional[list[list[float]]]:
     """
-    Generate embedding LOKAL (gratis, gak ada API call keluar) buat sekumpulan teks.
-    Return None kalau gagal (model gagal load, dsb) — caller wajib handle graceful.
+    Generate embedding via Hugging Face Serverless API (Ringan, tanpa RAM server/PyTorch).
+    Return None kalau gagal — caller (process_and_store_document & search) tetep aman handle graceful.
     """
     if not texts:
         return None
+        
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    payload = {
+        "inputs": texts,
+        "options": {"wait_for_model": True}
+    }
+    
     try:
-        model = _get_model()
-        embeddings = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
-        return embeddings.tolist()
+        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            embeddings = response.json()
+            # Memastikan format balikan adalah list of vectors
+            if isinstance(embeddings, list):
+                return embeddings
+            return None
+        else:
+            print(f"[curriculum] HF API Error status {response.status_code}: {response.text}")
+            return None
+            
     except Exception as e:
-        print(f"[curriculum] Gagal generate embedding lokal: {e}")
+        print(f"[curriculum] Gagal panggil HF API: {e}")
         return None
 
 
