@@ -28,7 +28,7 @@ from typing import Optional
 import pypdf
 from supabase import Client
 
-EMBEDDING_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 EMBEDDING_DIMENSIONS = 384
 CHUNK_SIZE = 600
 CHUNK_OVERLAP = 60

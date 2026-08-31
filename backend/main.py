@@ -37,12 +37,12 @@ load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Load model embedding saat server startup agar tidak timeout di tengah chat
     try:
-        search_relevant_chunks(None, "test", "SD (Sekolah Dasar)", top_k=1)
-        print("Model embedding berhasil dimuat saat startup!")
+        print("Memuat model embedding...")
+        search_relevant_chunks(supabase, "test", "SD (Sekolah Dasar)", top_k=1)
+        print("Model embedding berhasil dimuat!")
     except Exception as e:
-        print(f"Warning startup embedding: {e}")
+        print(f"Warning: Gagal memuat embedding di startup (server tetap jalan): {e}")
     yield
 
 app = FastAPI(title="Tutor Pintar AI — Backend", lifespan=lifespan)
